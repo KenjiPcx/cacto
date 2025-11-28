@@ -2,6 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".CactoApplication"
@@ -22,7 +28,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Share receiver for screenshots -->
+        <!-- Share receiver for screenshots (fallback) -->
         <activity
             android:name=".ShareReceiverActivity"
             android:exported="true"
@@ -34,7 +40,16 @@
             </intent-filter>
         </activity>
         
+        <!-- Foreground service for screenshot detection -->
+        <service
+            android:name=".CactoService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="screenshot_detection" />
+        </service>
+        
     </application>
 
 </manifest>
-

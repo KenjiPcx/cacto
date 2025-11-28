@@ -269,3 +269,51 @@ data class SpendingContext(
     val typicalSpend: Int? = null,
     val frequency: String? = null // daily, weekly, monthly, yearly
 )
+
+// ============================================
+// Processing History (Debug)
+// ============================================
+
+@Serializable
+data class ProcessingHistory(
+    val id: Long = 0,
+    val screenshotPath: String,
+    val startedAt: Long,
+    val completedAt: Long? = null,
+    val status: ProcessingStatus = ProcessingStatus.PROCESSING,
+    val actionType: String? = null,
+    val screenshotDescription: String? = null,
+    val memoriesSaved: Int = 0,
+    val entitiesCreated: Int = 0,
+    val relationsCreated: Int = 0,
+    val generatedResponse: String? = null,
+    val errorMessage: String? = null,
+    val steps: List<ProcessingStep> = emptyList()
+)
+
+@Serializable
+enum class ProcessingStatus {
+    PROCESSING,
+    COMPLETED,
+    ERROR
+}
+
+@Serializable
+data class ProcessingStep(
+    val id: Long = 0,
+    val historyId: Long,
+    val stepName: String,
+    val stepStatus: StepStatus = StepStatus.PENDING,
+    val startedAt: Long,
+    val completedAt: Long? = null,
+    val details: String? = null,
+    val errorMessage: String? = null
+)
+
+@Serializable
+enum class StepStatus {
+    PENDING,
+    RUNNING,
+    COMPLETED,
+    ERROR
+}

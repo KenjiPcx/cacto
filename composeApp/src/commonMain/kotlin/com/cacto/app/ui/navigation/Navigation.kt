@@ -31,6 +31,7 @@ package com.cacto.app.ui.navigation
 enum class Screen {
     HOME,
     MEMORIES,
-    KNOWLEDGE_GRAPH
+    KNOWLEDGE_GRAPH,
+    DEBUG
 }
 

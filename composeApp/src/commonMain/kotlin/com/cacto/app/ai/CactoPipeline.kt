@@ -6,22 +6,11 @@ package com.cacto.app.ai
  *
  * PURPOSE:
  * Main orchestration pipeline for processing screenshots. Implements a multi-step
- * extraction process:
- * 1. Action Classification (SAVE_MEMORY, TAKE_ACTION, BOTH)
- * 2. Memory Extraction (with sophisticated filtering)
- * 3. Batch Entity Extraction (with deduplication)
- * 4. Entity Resolution (vector similarity + LLM verification)
- * 5. Relation Creation (memory→entity and entity→entity)
- * 6. Response Generation (if needed)
+ * extraction process with full logging to history for debugging.
  *
  * WHERE USED:
- * - Imported by: App composable, ShareReceiverActivity, MainActivity
- * - Called from: ShareReceiverActivity (auto-processing), App (state observation)
- *
- * DESIGN PHILOSOPHY:
- * Central coordinator that manages the entire processing workflow. Uses StateFlow
- * for reactive state management. Separates concerns into specialized extractors.
- * Provides detailed progress tracking for better UX.
+ * - Imported by: App composable, ShareReceiverActivity, CactoService
+ * - Called from: ShareReceiverActivity (auto-processing), CactoService (screenshot detection)
  */
 
 import com.cacto.app.data.model.ActionType
@@ -31,9 +20,12 @@ import com.cacto.app.data.model.ExtractedMemory
 import com.cacto.app.data.model.Importance
 import com.cacto.app.data.model.Memory
 import com.cacto.app.data.model.MemoryType
+import com.cacto.app.data.model.ProcessingStatus
 import com.cacto.app.data.model.Relation
 import com.cacto.app.data.model.RelationSourceType
+import com.cacto.app.data.model.StepStatus
 import com.cacto.app.data.repository.EntityRepository
+import com.cacto.app.data.repository.HistoryRepository
 import com.cacto.app.data.repository.MemoryRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -76,12 +68,12 @@ class CactoPipeline(
     private val memoryExtractor: MemoryExtractor,
     private val actionGenerator: ActionGenerator,
     private val memoryRepository: MemoryRepository,
-    private val entityRepository: EntityRepository
+    private val entityRepository: EntityRepository,
+    private val historyRepository: HistoryRepository
 ) {
     private val _state = MutableStateFlow(PipelineState())
     val state: StateFlow<PipelineState> = _state.asStateFlow()
     
-    // Entity resolution service (created lazily)
     private var entityResolutionService: EntityResolutionService? = null
     
     private fun getEntityResolutionService(): EntityResolutionService {
@@ -98,16 +90,29 @@ class CactoPipeline(
         imagePath: String,
         onResponseToken: ((String) -> Unit)? = null
     ): Result<PipelineResult> {
+        // Start history tracking
+        val historyId = historyRepository.startProcessing(imagePath)
+        var currentStepId: Long = 0
+        
         return try {
-            // Initialize model if needed
-            updateState(PipelineStatus.INITIALIZING, "Initializing AI model...", 0.05f)
-            if (!cactusService.isModelLoaded()) {
+            // Step 1: Initialize models
+            currentStepId = historyRepository.addStep(historyId, "Initialize AI Models")
+            updateState(PipelineStatus.INITIALIZING, "Initializing AI models...", 0.05f)
+            
+            if (!cactusService.isVisionModelLoaded()) {
                 cactusService.initializeVisionModel().getOrThrow()
             }
+            if (!cactusService.isTextModelLoaded()) {
+                cactusService.initializeTextModel().getOrThrow()
+            }
+            historyRepository.completeStep(currentStepId, StepStatus.COMPLETED, "Vision & Text models ready")
             
-            // Step 1: Classify action
+            // Step 2: Classify action
+            currentStepId = historyRepository.addStep(historyId, "Classify Action")
             updateState(PipelineStatus.ANALYZING, "Analyzing screenshot...", 0.1f)
             val analysisResult = memoryExtractor.classifyAction(imagePath).getOrThrow()
+            historyRepository.completeStep(currentStepId, StepStatus.COMPLETED, 
+                "Action: ${analysisResult.actionType}, Context: ${analysisResult.context.take(100)}")
             
             var memoriesSaved = 0
             var entitiesCreated = 0
@@ -115,29 +120,36 @@ class CactoPipeline(
             var generatedResponse: String? = null
             var screenshotDescription = analysisResult.context
             
-            // Step 2: Handle based on action type
+            // Step 3: Handle based on action type
             when (analysisResult.actionType) {
                 ActionType.SAVE_MEMORY -> {
-                    val (memories, entities, relations) = processMemoriesAndEntities(imagePath)
+                    val (memories, entities, relations) = processMemoriesAndEntities(imagePath, historyId)
                     memoriesSaved = memories
                     entitiesCreated = entities
                     relationsCreated = relations
                 }
                 ActionType.TAKE_ACTION -> {
-                    // Get better screenshot description for response generation
+                    currentStepId = historyRepository.addStep(historyId, "Describe Screenshot")
                     screenshotDescription = memoryExtractor.describeScreenshot(imagePath)
                         .getOrElse { analysisResult.context }
-                    generatedResponse = processAction(screenshotDescription, onResponseToken)
+                    historyRepository.completeStep(currentStepId, StepStatus.COMPLETED, 
+                        screenshotDescription.take(200))
+                    
+                    generatedResponse = processAction(screenshotDescription, historyId, onResponseToken)
                 }
                 ActionType.BOTH -> {
-                    val (memories, entities, relations) = processMemoriesAndEntities(imagePath)
+                    val (memories, entities, relations) = processMemoriesAndEntities(imagePath, historyId)
                     memoriesSaved = memories
                     entitiesCreated = entities
                     relationsCreated = relations
                     
+                    currentStepId = historyRepository.addStep(historyId, "Describe Screenshot")
                     screenshotDescription = memoryExtractor.describeScreenshot(imagePath)
                         .getOrElse { analysisResult.context }
-                    generatedResponse = processAction(screenshotDescription, onResponseToken)
+                    historyRepository.completeStep(currentStepId, StepStatus.COMPLETED,
+                        screenshotDescription.take(200))
+                    
+                    generatedResponse = processAction(screenshotDescription, historyId, onResponseToken)
                 }
             }
             
@@ -150,34 +162,53 @@ class CactoPipeline(
                 screenshotDescription = screenshotDescription
             )
             
-            // Clear entity resolution cache after processing
-            entityResolutionService?.clearCache()
+            // Complete history
+            historyRepository.completeProcessing(
+                historyId = historyId,
+                status = ProcessingStatus.COMPLETED,
+                actionType = analysisResult.actionType.name,
+                screenshotDescription = screenshotDescription.take(500),
+                memoriesSaved = memoriesSaved,
+                entitiesCreated = entitiesCreated,
+                relationsCreated = relationsCreated,
+                generatedResponse = generatedResponse,
+                errorMessage = null
+            )
             
+            entityResolutionService?.clearCache()
             updateState(PipelineStatus.COMPLETE, "Done!", 1f, result = result)
             Result.success(result)
             
         } catch (e: Exception) {
+            // Log error
+            historyRepository.completeStep(currentStepId, StepStatus.ERROR, errorMessage = e.message)
+            historyRepository.completeProcessing(
+                historyId = historyId,
+                status = ProcessingStatus.ERROR,
+                actionType = null,
+                screenshotDescription = null,
+                memoriesSaved = 0,
+                entitiesCreated = 0,
+                relationsCreated = 0,
+                generatedResponse = null,
+                errorMessage = e.message
+            )
+            
             updateState(PipelineStatus.ERROR, "Error: ${e.message}", error = e.message)
             Result.failure(e)
         }
     }
     
-    /**
-     * Process memories and entities from a screenshot.
-     * 
-     * Flow:
-     * 1. Extract memories from screenshot
-     * 2. Generate embeddings for memories
-     * 3. Save memories to database
-     * 4. Batch extract entities from memories
-     * 5. Resolve entities (deduplication)
-     * 6. Create memory→entity relations
-     * 7. Create entity→entity relations
-     */
-    private suspend fun processMemoriesAndEntities(imagePath: String): Triple<Int, Int, Int> {
-        // Step 1: Extract memories
+    private suspend fun processMemoriesAndEntities(
+        imagePath: String, 
+        historyId: Long
+    ): Triple<Int, Int, Int> {
+        // Step: Extract memories
+        var stepId = historyRepository.addStep(historyId, "Extract Memories")
         updateState(PipelineStatus.EXTRACTING_MEMORIES, "Extracting memories...", 0.2f)
         val extractedMemories = memoryExtractor.extractMemories(imagePath).getOrElse { emptyList() }
+        historyRepository.completeStep(stepId, StepStatus.COMPLETED, 
+            "Found ${extractedMemories.size} memories: ${extractedMemories.map { it.content.take(50) }}")
         
         if (extractedMemories.isEmpty()) {
             return Triple(0, 0, 0)
@@ -187,22 +218,18 @@ class CactoPipeline(
         var entitiesCreated = 0
         var relationsCreated = 0
         
-        // Track saved memory IDs for relation creation
         val savedMemoryIds = mutableListOf<Long>()
         val savedMemories = mutableListOf<ExtractedMemory>()
         
-        // Step 2 & 3: Generate embeddings and save memories
+        // Step: Generate embeddings and save
+        stepId = historyRepository.addStep(historyId, "Generate Embeddings & Save Memories")
         for ((index, extractedMemory) in extractedMemories.withIndex()) {
             val progress = 0.2f + (0.3f * (index + 1) / extractedMemories.size)
-            
             updateState(PipelineStatus.GENERATING_EMBEDDINGS, 
-                "Generating embedding ${index + 1}/${extractedMemories.size}...", progress)
+                "Embedding ${index + 1}/${extractedMemories.size}...", progress)
             
             val embedding = memoryExtractor.generateEmbedding(extractedMemory.content)
                 .getOrElse { emptyList() }
-            
-            updateState(PipelineStatus.SAVING_DATA, 
-                "Saving memory ${index + 1}/${extractedMemories.size}...", progress + 0.05f)
             
             val memory = Memory(
                 content = extractedMemory.content,
@@ -221,27 +248,32 @@ class CactoPipeline(
             savedMemories.add(extractedMemory)
             memoriesSaved++
         }
+        historyRepository.completeStep(stepId, StepStatus.COMPLETED, 
+            "Saved $memoriesSaved memories with embeddings")
         
-        // Step 4: Batch extract entities from memories
+        // Step: Extract entities
+        stepId = historyRepository.addStep(historyId, "Extract Entities")
         updateState(PipelineStatus.EXTRACTING_ENTITIES, "Extracting entities...", 0.55f)
-        val batchExtraction = memoryExtractor.extractEntitiesFromBatch(savedMemories)
-            .getOrNull()
+        val batchExtraction = memoryExtractor.extractEntitiesFromBatch(savedMemories).getOrNull()
         
         if (batchExtraction == null || batchExtraction.entities.isEmpty()) {
+            historyRepository.completeStep(stepId, StepStatus.COMPLETED, "No entities found")
             return Triple(memoriesSaved, 0, 0)
         }
+        historyRepository.completeStep(stepId, StepStatus.COMPLETED, 
+            "Found ${batchExtraction.entities.size} entities: ${batchExtraction.entities.map { it.name }}")
         
-        // Step 5: Resolve entities (deduplication with vector search + LLM)
+        // Step: Resolve entities
+        stepId = historyRepository.addStep(historyId, "Resolve Entities (Deduplication)")
         updateState(PipelineStatus.RESOLVING_ENTITIES, "Resolving entities...", 0.65f)
         val resolutionService = getEntityResolutionService()
-        val resolvedEntityMap = mutableMapOf<String, Long>() // name.lowercase -> entity ID
+        val resolvedEntityMap = mutableMapOf<String, Long>()
         
         for ((index, extractedEntity) in batchExtraction.entities.withIndex()) {
             val progress = 0.65f + (0.15f * (index + 1) / batchExtraction.entities.size)
             updateState(PipelineStatus.RESOLVING_ENTITIES, 
-                "Resolving entity ${index + 1}/${batchExtraction.entities.size}: ${extractedEntity.name}", progress)
+                "Resolving: ${extractedEntity.name}", progress)
             
-            // Get memory context for better resolution
             val memoryContexts = extractedEntity.mentionedInMemoryIndices
                 .take(3)
                 .mapNotNull { idx ->
@@ -250,7 +282,6 @@ class CactoPipeline(
                 }
             val contextStr = memoryContexts.joinToString(" | ")
             
-            // Resolve entity (finds existing or creates new)
             val resolvedEntity = resolutionService.resolveEntity(
                 name = extractedEntity.name,
                 entityType = memoryExtractor.parseEntityType(extractedEntity.entityType),
@@ -261,27 +292,27 @@ class CactoPipeline(
             resolvedEntityMap[extractedEntity.name.lowercase()] = resolvedEntity.id
             entitiesCreated++
         }
+        historyRepository.completeStep(stepId, StepStatus.COMPLETED, 
+            "Resolved $entitiesCreated entities: ${resolvedEntityMap.keys.toList()}")
         
-        // Step 6: Create memory→entity relations
-        updateState(PipelineStatus.CREATING_RELATIONS, "Creating memory-entity links...", 0.85f)
+        // Step: Create relations
+        stepId = historyRepository.addStep(historyId, "Create Relations")
+        updateState(PipelineStatus.CREATING_RELATIONS, "Creating relations...", 0.85f)
+        
+        // Memory-entity links
         for (extractedEntity in batchExtraction.entities) {
             val entityId = resolvedEntityMap[extractedEntity.name.lowercase()] ?: continue
-            
             for (memoryIdx in extractedEntity.mentionedInMemoryIndices) {
                 if (memoryIdx < savedMemoryIds.size) {
-                    val memoryId = savedMemoryIds[memoryIdx]
                     try {
-                        entityRepository.linkMemoryToEntity(memoryId, entityId)
+                        entityRepository.linkMemoryToEntity(savedMemoryIds[memoryIdx], entityId)
                         relationsCreated++
-                    } catch (e: Exception) {
-                        // Link already exists, ignore
-                    }
+                    } catch (e: Exception) { }
                 }
             }
         }
         
-        // Step 7: Create entity→entity relations
-        updateState(PipelineStatus.CREATING_RELATIONS, "Creating entity-entity relations...", 0.9f)
+        // Entity-entity relations
         for (relation in batchExtraction.relations) {
             val sourceId = resolvedEntityMap[relation.sourceName.lowercase()]
             val targetId = resolvedEntityMap[relation.targetName.lowercase()]
@@ -300,28 +331,25 @@ class CactoPipeline(
                         )
                     )
                     relationsCreated++
-                } catch (e: Exception) {
-                    // Relation already exists or failed, ignore
-                }
+                } catch (e: Exception) { }
             }
         }
+        historyRepository.completeStep(stepId, StepStatus.COMPLETED, 
+            "Created $relationsCreated relations")
         
         return Triple(memoriesSaved, entitiesCreated, relationsCreated)
     }
     
-    /**
-     * Process action: generate contextual response.
-     */
     private suspend fun processAction(
         screenshotDescription: String,
+        historyId: Long,
         onResponseToken: ((String) -> Unit)?
     ): String {
+        // Step: Vector search
+        var stepId = historyRepository.addStep(historyId, "Vector Search for Context")
         updateState(PipelineStatus.GENERATING_RESPONSE, "Finding relevant context...", 0.75f)
         
-        // Get all memories for vector search
         val allMemories = memoryRepository.getAllMemories()
-        
-        // Generate embedding for the screenshot description to find relevant memories
         val queryEmbedding = memoryExtractor.generateEmbedding(screenshotDescription)
             .getOrElse { emptyList() }
         
@@ -331,7 +359,11 @@ class CactoPipeline(
         } else {
             memoryRepository.getRecentMemories(5)
         }
+        historyRepository.completeStep(stepId, StepStatus.COMPLETED, 
+            "Found ${relevantMemories.size} relevant memories: ${relevantMemories.map { it.content.take(30) }}")
         
+        // Step: Generate response
+        stepId = historyRepository.addStep(historyId, "Generate Response")
         updateState(PipelineStatus.GENERATING_RESPONSE, "Generating response...", 0.85f)
         
         val response = actionGenerator.generateResponse(
@@ -339,6 +371,9 @@ class CactoPipeline(
             relevantMemories = relevantMemories,
             onToken = onResponseToken
         ).getOrThrow()
+        
+        historyRepository.completeStep(stepId, StepStatus.COMPLETED, 
+            "Generated: ${response.response.take(100)}...")
         
         return response.response
     }

@@ -199,6 +199,74 @@ JOIN entities se ON r.source_entity_id = se.id
 JOIN entities te ON r.target_entity_id = te.id;
 
 -- ============================================
+-- Processing History (Debug)
+-- ============================================
+
+CREATE TABLE processing_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    screenshot_path TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    completed_at INTEGER,
+    status TEXT NOT NULL DEFAULT 'processing',
+    action_type TEXT,
+    screenshot_description TEXT,
+    memories_saved INTEGER DEFAULT 0,
+    entities_created INTEGER DEFAULT 0,
+    relations_created INTEGER DEFAULT 0,
+    generated_response TEXT,
+    error_message TEXT
+);
+
+CREATE TABLE processing_steps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    history_id INTEGER NOT NULL REFERENCES processing_history(id) ON DELETE CASCADE,
+    step_name TEXT NOT NULL,
+    step_status TEXT NOT NULL DEFAULT 'pending',
+    started_at INTEGER NOT NULL,
+    completed_at INTEGER,
+    details TEXT,
+    error_message TEXT
+);
+
+insertProcessingHistory:
+INSERT INTO processing_history (screenshot_path, started_at, status)
+VALUES (?, ?, 'processing');
+
+getLastInsertedHistoryId:
+SELECT last_insert_rowid();
+
+updateProcessingHistory:
+UPDATE processing_history 
+SET completed_at = ?, status = ?, action_type = ?, screenshot_description = ?,
+    memories_saved = ?, entities_created = ?, relations_created = ?, 
+    generated_response = ?, error_message = ?
+WHERE id = ?;
+
+insertProcessingStep:
+INSERT INTO processing_steps (history_id, step_name, step_status, started_at, details)
+VALUES (?, ?, ?, ?, ?);
+
+updateProcessingStep:
+UPDATE processing_steps 
+SET step_status = ?, completed_at = ?, details = ?, error_message = ?
+WHERE id = ?;
+
+getLastInsertedStepId:
+SELECT last_insert_rowid();
+
+getAllProcessingHistory:
+SELECT * FROM processing_history ORDER BY started_at DESC;
+
+getProcessingHistoryById:
+SELECT * FROM processing_history WHERE id = ?;
+
+getStepsForHistory:
+SELECT * FROM processing_steps WHERE history_id = ? ORDER BY started_at ASC;
+
+getRecentProcessingHistory:
+SELECT * FROM processing_history ORDER BY started_at DESC LIMIT ?;
+
+-- ============================================
 -- Stats
 -- ============================================
 

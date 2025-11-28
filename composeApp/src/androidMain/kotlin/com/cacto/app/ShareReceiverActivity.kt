@@ -176,6 +176,8 @@ fun ShareReceiverScreen(
                         PipelineStatus.EXTRACTING_MEMORIES -> "🧠 Extracting memories..."
                         PipelineStatus.GENERATING_EMBEDDINGS -> "📊 Creating embeddings..."
                         PipelineStatus.EXTRACTING_ENTITIES -> "🔗 Building knowledge graph..."
+                        PipelineStatus.RESOLVING_ENTITIES -> "🔍 Resolving entities..."
+                        PipelineStatus.CREATING_RELATIONS -> "🔗 Creating relations..."
                         PipelineStatus.SAVING_DATA -> "💾 Saving data..."
                         PipelineStatus.GENERATING_RESPONSE -> "✨ Generating response..."
                         PipelineStatus.COMPLETE -> "✅ Done!"

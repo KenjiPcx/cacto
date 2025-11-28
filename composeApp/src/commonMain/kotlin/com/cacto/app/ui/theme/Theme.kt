@@ -35,7 +35,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-// Cacto color palette - Desert night vibes
+// Cacto color palette - Desert night / Cyberpunk vibes
 val CactoGreen = Color(0xFF4ECDC4)
 val CactoGreenDark = Color(0xFF2D9A8F)
 val CactoPink = Color(0xFFE94560)
@@ -44,18 +44,19 @@ val CactoPurple = Color(0xFF7B2CBF)
 val CactoYellow = Color(0xFFF7D060)
 val CactoOrange = Color(0xFFFF6B35)
 
-// Background colors
-val DarkBackground = Color(0xFF1A1A2E)
-val DarkSurface = Color(0xFF16213E)
-val DarkSurfaceVariant = Color(0xFF0F3460)
+// Background colors - Nothing Phone Style (Deep Blacks/Greys)
+val DarkBackground = Color(0xFF050505)
+val DarkSurface = Color(0xFF121212)
+val DarkSurfaceVariant = Color(0xFF1E1E1E)
 
+// Keeping light mode as is, though dark mode is preferred for this aesthetic
 val LightBackground = Color(0xFFF8F9FA)
 val LightSurface = Color(0xFFFFFFFF)
 val LightSurfaceVariant = Color(0xFFE9ECEF)
 
 private val DarkColorScheme = darkColorScheme(
     primary = CactoGreen,
-    onPrimary = DarkBackground,
+    onPrimary = Color.Black,
     primaryContainer = CactoGreenDark,
     onPrimaryContainer = Color.White,
     secondary = CactoPink,
@@ -108,4 +109,3 @@ fun CactoTheme(
         content = content
     )
 }
-

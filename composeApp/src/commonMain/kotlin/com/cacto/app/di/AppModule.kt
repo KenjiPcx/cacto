@@ -24,6 +24,7 @@ import com.cacto.app.ai.EntityResolutionService
 import com.cacto.app.ai.MemoryExtractor
 import com.cacto.app.data.DatabaseDriverFactory
 import com.cacto.app.data.repository.EntityRepository
+import com.cacto.app.data.repository.HistoryRepository
 import com.cacto.app.data.repository.MemoryRepository
 import com.cacto.app.db.CactoDatabase
 import org.koin.core.module.Module
@@ -39,6 +40,7 @@ val sharedModule = module {
     // Repositories
     single { MemoryRepository(get()) }
     single { EntityRepository(get()) }
+    single { HistoryRepository(get()) }
     
     // AI Services
     single { CactusService() }
@@ -60,7 +62,8 @@ val sharedModule = module {
             memoryExtractor = get(),
             actionGenerator = get(),
             memoryRepository = get(),
-            entityRepository = get()
+            entityRepository = get(),
+            historyRepository = get()
         )
     }
 }

@@ -5,155 +5,164 @@ package com.cacto.app.ai
  * ==============
  *
  * PURPOSE:
- * Wrapper service for the Cactus SDK that provides a unified interface for AI operations
- * including LLM text generation, vision model image analysis, and embedding generation.
- * Manages model initialization, loading, and lifecycle.
+ * Wrapper service for the Cactus SDK that provides a unified interface for AI operations.
+ * Manages two models: vision model (lfm2-vl-450m) for screenshot analysis and
+ * text model (qwen3-0.6) for completions and embeddings.
  *
  * WHERE USED:
  * - Imported by: MemoryExtractor, ActionGenerator
  * - Called from: CactoPipeline (indirectly through extractors)
- * - Used in workflows: Screenshot processing pipeline, memory extraction, response generation
- *
- * RELATIONSHIPS:
- * - Provides services to: MemoryExtractor, ActionGenerator
- * - Wraps: Cactus SDK (CactusLM)
- * - Manages: Model lifecycle and initialization
- *
- * USAGE IN AI PROCESSING:
- * - Initializes vision model for screenshot analysis
- * - Generates embeddings for vector search
- * - Provides text completion for memory extraction and response generation
- * - Handles streaming responses for real-time UI updates
  *
  * DESIGN PHILOSOPHY:
- * Single entry point for all Cactus SDK operations. Abstracts away SDK details
- * and provides Result-based error handling. Manages model state to avoid redundant
- * initializations. Supports both standard and vision-capable models.
+ * Manages model lifecycle with separate vision and text models. Downloads models
+ * on first use. Provides Result-based error handling.
  */
 
 import com.cactus.CactusLM
 import com.cactus.CactusInitParams
 import com.cactus.CactusCompletionParams
 import com.cactus.ChatMessage
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+data class ModelDownloadState(
+    val isDownloading: Boolean = false,
+    val currentModel: String = "",
+    val progress: String = "",
+    val visionModelReady: Boolean = false,
+    val textModelReady: Boolean = false,
+    val error: String? = null
+)
 
 class CactusService {
     
-    private var lm: CactusLM? = null
-    private var currentModel: String? = null
-    private var isInitialized = false
+    private var visionLM: CactusLM? = null
+    private var textLM: CactusLM? = null
+    
+    private var visionModelLoaded = false
+    private var textModelLoaded = false
+    
+    private val _downloadState = MutableStateFlow(ModelDownloadState())
+    val downloadState: StateFlow<ModelDownloadState> = _downloadState.asStateFlow()
     
     companion object {
-        const val DEFAULT_MODEL = "qwen3-0.6"
-        const val VISION_MODEL = "gemma3-4b"  // Vision-capable model
+        // Vision model for screenshot analysis
+        const val VISION_MODEL = "lfm2-vl-450m"
+        
+        // Text model for completions, entity extraction, embeddings
+        const val TEXT_MODEL = "qwen3-0.6"
+        
         const val CONTEXT_SIZE = 2048
     }
     
-    suspend fun initialize(model: String = DEFAULT_MODEL): Result<Unit> {
+    /**
+     * Download all required models. Call this on app launch.
+     */
+    suspend fun downloadModels(): Result<Unit> {
         return try {
-            if (lm == null) {
-                lm = CactusLM()
-            }
-            
-            // Download model if needed
-            lm?.downloadModel(model)
-            
-            // Initialize model
-            lm?.initializeModel(
-                CactusInitParams(
-                    model = model,
-                    contextSize = CONTEXT_SIZE
-                )
+            // Download vision model
+            _downloadState.value = ModelDownloadState(
+                isDownloading = true,
+                currentModel = VISION_MODEL,
+                progress = "Downloading vision model..."
             )
             
-            currentModel = model
-            isInitialized = true
+            if (visionLM == null) {
+                visionLM = CactusLM()
+            }
+            visionLM?.downloadModel(VISION_MODEL)
+            
+            _downloadState.value = _downloadState.value.copy(
+                visionModelReady = true,
+                currentModel = TEXT_MODEL,
+                progress = "Downloading text model..."
+            )
+            
+            // Download text model
+            if (textLM == null) {
+                textLM = CactusLM()
+            }
+            textLM?.downloadModel(TEXT_MODEL)
+            
+            _downloadState.value = _downloadState.value.copy(
+                isDownloading = false,
+                textModelReady = true,
+                progress = "All models ready!"
+            )
+            
             Result.success(Unit)
         } catch (e: Exception) {
+            _downloadState.value = _downloadState.value.copy(
+                isDownloading = false,
+                error = "Download failed: ${e.message}"
+            )
             Result.failure(e)
         }
     }
     
+    /**
+     * Check if models are downloaded (doesn't initialize them).
+     */
+    fun areModelsDownloaded(): Boolean {
+        return _downloadState.value.visionModelReady && _downloadState.value.textModelReady
+    }
+    
+    /**
+     * Initialize the vision model for image analysis.
+     */
     suspend fun initializeVisionModel(): Result<Unit> {
         return try {
-            if (lm == null) {
-                lm = CactusLM()
+            if (visionModelLoaded) return Result.success(Unit)
+            
+            if (visionLM == null) {
+                visionLM = CactusLM()
+                visionLM?.downloadModel(VISION_MODEL)
             }
             
-            // Get available models and find a vision-capable one
-            val models = lm?.getModels() ?: emptyList()
-            val visionModel = models.firstOrNull { it.supports_vision }
-            
-            val modelSlug = visionModel?.slug ?: VISION_MODEL
-            
-            lm?.downloadModel(modelSlug)
-            lm?.initializeModel(
+            visionLM?.initializeModel(
                 CactusInitParams(
-                    model = modelSlug,
+                    model = VISION_MODEL,
                     contextSize = CONTEXT_SIZE
                 )
             )
             
-            currentModel = modelSlug
-            isInitialized = true
+            visionModelLoaded = true
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
     
-    suspend fun generateCompletion(
-        prompt: String,
-        systemPrompt: String? = null,
-        maxTokens: Int = 500,
-        onToken: ((String) -> Unit)? = null
-    ): Result<String> {
+    /**
+     * Initialize the text model for completions and embeddings.
+     */
+    suspend fun initializeTextModel(): Result<Unit> {
         return try {
-            val messages = buildList {
-                systemPrompt?.let { add(ChatMessage(content = it, role = "system")) }
-                add(ChatMessage(content = prompt, role = "user"))
+            if (textModelLoaded) return Result.success(Unit)
+            
+            if (textLM == null) {
+                textLM = CactusLM()
+                textLM?.downloadModel(TEXT_MODEL)
             }
             
-            val result = lm?.generateCompletion(
-                messages = messages,
-                params = CactusCompletionParams(maxTokens = maxTokens),
-                onToken = if (onToken != null) { token, _ -> onToken(token) } else null
+            textLM?.initializeModel(
+                CactusInitParams(
+                    model = TEXT_MODEL,
+                    contextSize = CONTEXT_SIZE
+                )
             )
             
-            if (result?.success == true && result.response != null) {
-                Result.success(result.response!!)
-            } else {
-                Result.failure(Exception("Failed to generate completion"))
-            }
+            textModelLoaded = true
+            Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
     
-    fun generateCompletionStream(
-        prompt: String,
-        systemPrompt: String? = null,
-        maxTokens: Int = 500
-    ): Flow<String> = flow {
-        val messages = buildList {
-            systemPrompt?.let { add(ChatMessage(content = it, role = "system")) }
-            add(ChatMessage(content = prompt, role = "user"))
-        }
-        
-        val fullResponse = StringBuilder()
-        
-        lm?.generateCompletion(
-            messages = messages,
-            params = CactusCompletionParams(maxTokens = maxTokens),
-            onToken = { token, _ ->
-                fullResponse.append(token)
-            }
-        )
-        
-        emit(fullResponse.toString())
-    }
-    
+    /**
+     * Analyze an image using the vision model.
+     */
     suspend fun analyzeImage(
         imagePath: String,
         prompt: String,
@@ -161,6 +170,11 @@ class CactusService {
         maxTokens: Int = 500
     ): Result<String> {
         return try {
+            // Ensure vision model is ready
+            if (!visionModelLoaded) {
+                initializeVisionModel().getOrThrow()
+            }
+            
             val messages = buildList {
                 systemPrompt?.let { add(ChatMessage(content = it, role = "system")) }
                 add(ChatMessage(
@@ -170,7 +184,7 @@ class CactusService {
                 ))
             }
             
-            val result = lm?.generateCompletion(
+            val result = visionLM?.generateCompletion(
                 messages = messages,
                 params = CactusCompletionParams(maxTokens = maxTokens)
             )
@@ -178,43 +192,93 @@ class CactusService {
             if (result?.success == true && result.response != null) {
                 Result.success(result.response!!)
             } else {
-                Result.failure(Exception("Failed to analyze image"))
+                Result.failure(Exception("Vision analysis failed"))
             }
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
     
+    /**
+     * Generate text completion using the text model.
+     */
+    suspend fun generateCompletion(
+        prompt: String,
+        systemPrompt: String? = null,
+        maxTokens: Int = 500,
+        onToken: ((String) -> Unit)? = null
+    ): Result<String> {
+        return try {
+            // Ensure text model is ready
+            if (!textModelLoaded) {
+                initializeTextModel().getOrThrow()
+            }
+            
+            val messages = buildList {
+                systemPrompt?.let { add(ChatMessage(content = it, role = "system")) }
+                add(ChatMessage(content = prompt, role = "user"))
+            }
+            
+            val result = textLM?.generateCompletion(
+                messages = messages,
+                params = CactusCompletionParams(maxTokens = maxTokens),
+                onToken = if (onToken != null) { token, _ -> onToken(token) } else null
+            )
+            
+            if (result?.success == true && result.response != null) {
+                Result.success(result.response!!)
+            } else {
+                Result.failure(Exception("Completion failed"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Generate embedding using the text model.
+     */
     suspend fun generateEmbedding(text: String): Result<List<Double>> {
         return try {
-            val result = lm?.generateEmbedding(text)
+            // Ensure text model is ready
+            if (!textModelLoaded) {
+                initializeTextModel().getOrThrow()
+            }
+            
+            val result = textLM?.generateEmbedding(text)
             
             if (result?.success == true) {
                 Result.success(result.embeddings)
             } else {
-                Result.failure(Exception(result?.errorMessage ?: "Failed to generate embedding"))
+                Result.failure(Exception(result?.errorMessage ?: "Embedding failed"))
             }
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
     
-    suspend fun getAvailableModels(): List<String> {
-        return try {
-            lm?.getModels()?.map { it.slug } ?: emptyList()
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
+    /**
+     * Check if vision model is loaded and ready.
+     */
+    fun isVisionModelLoaded(): Boolean = visionModelLoaded
     
-    fun isModelLoaded(): Boolean = lm?.isLoaded() == true
+    /**
+     * Check if text model is loaded and ready.
+     */
+    fun isTextModelLoaded(): Boolean = textModelLoaded
     
-    fun getCurrentModel(): String? = currentModel
+    /**
+     * Check if any model is loaded (for backward compatibility).
+     */
+    fun isModelLoaded(): Boolean = visionModelLoaded || textModelLoaded
     
+    /**
+     * Unload all models to free memory.
+     */
     fun unload() {
-        lm?.unload()
-        isInitialized = false
-        currentModel = null
+        visionLM?.unload()
+        textLM?.unload()
+        visionModelLoaded = false
+        textModelLoaded = false
     }
 }
-

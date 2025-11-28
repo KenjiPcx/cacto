@@ -37,6 +37,7 @@ composeApp/
 │   │   │   └── DatabaseDriverFactory.kt
 │   │   ├── di/AppModule.kt                # Dependency injection
 │   │   ├── ui/
+│   │   │   ├── components/                # UI components
 │   │   │   ├── screens/                   # UI screens
 │   │   │   ├── theme/Theme.kt             # App theming
 │   │   │   └── navigation/                # Navigation
@@ -138,6 +139,18 @@ Meanwhile, facts about the conversation partner are saved to the knowledge graph
 - 🟠 **Performance**: Heavy model inference on main pipeline might cause OOMs on lower-end devices.
 
 ## Recent Changes
+
+### UI Redesign (Completed)
+- **Goal**: Minimalist glassmorphism design (Nothing Phone style) with Palantir enterprise aesthetics and animated gradient orb background.
+- **Completed Tasks**:
+    - [x] Created `OrbBackground` component (Lava lamp effect)
+    - [x] Created `GlassCard`, `NeonButton`, `MonoText` components
+    - [x] Updated `Theme.kt` with new color palette (Dark/Neon)
+    - [x] Refactored `HomeScreen` to use new components
+    - [x] Refactored `MemoriesScreen` to use new components
+    - [x] Refactored `KnowledgeGraphScreen` to use new components
+    - [x] Added `OnboardingOverlay` with fun, engaging steps
+    - [x] Integrated Onboarding into `App.kt`
 
 ### Documentation Standards (Latest)
 - Created `AGENTS.md` with Kotlin-adapted engineering standards
