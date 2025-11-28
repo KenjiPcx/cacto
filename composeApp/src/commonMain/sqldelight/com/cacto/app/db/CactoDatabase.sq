@@ -1,0 +1,218 @@
+-- Memories table for storing extracted information with embeddings
+-- memory_type: fact, preference, insight, event, decision, interaction
+-- importance: low, medium, high
+-- structured_data: JSON string for preferences (category, sub_category, strength)
+CREATE TABLE memories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    content TEXT NOT NULL,
+    memory_type TEXT NOT NULL DEFAULT 'fact',
+    importance TEXT NOT NULL DEFAULT 'medium',
+    context TEXT,
+    embedding TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    source_type TEXT NOT NULL DEFAULT 'screenshot',
+    image_path TEXT,
+    structured_data TEXT
+);
+
+-- Entities table for knowledge graph nodes
+-- entity_type: person, place, preference, event, topic, project, organization, other
+CREATE TABLE entities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    description TEXT,
+    embedding TEXT,
+    created_at INTEGER NOT NULL,
+    UNIQUE(name, entity_type)
+);
+
+-- Relations table for knowledge graph edges
+-- source_type: memory, entity
+-- Supports both memory->entity and entity->entity relations
+CREATE TABLE relations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_type TEXT NOT NULL DEFAULT 'entity',
+    source_entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    target_entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    relation_type TEXT NOT NULL,
+    description TEXT,
+    memory_id INTEGER REFERENCES memories(id) ON DELETE SET NULL,
+    created_at INTEGER NOT NULL
+);
+
+-- Memory-Entity links (many-to-many)
+-- Tracks which entities are mentioned in which memories
+CREATE TABLE memory_entity_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    memory_id INTEGER NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
+    entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL,
+    UNIQUE(memory_id, entity_id)
+);
+
+-- ============================================
+-- Memory Queries
+-- ============================================
+
+getAllMemories:
+SELECT * FROM memories ORDER BY created_at DESC;
+
+getMemoryById:
+SELECT * FROM memories WHERE id = ?;
+
+insertMemory:
+INSERT INTO memories (content, memory_type, importance, context, embedding, created_at, source_type, image_path, structured_data)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+getLastInsertedMemoryId:
+SELECT last_insert_rowid();
+
+deleteMemory:
+DELETE FROM memories WHERE id = ?;
+
+searchMemoriesByContent:
+SELECT * FROM memories WHERE content LIKE '%' || ? || '%' ORDER BY created_at DESC;
+
+getRecentMemories:
+SELECT * FROM memories ORDER BY created_at DESC LIMIT ?;
+
+getMemoriesByType:
+SELECT * FROM memories WHERE memory_type = ? ORDER BY created_at DESC;
+
+getImportantMemories:
+SELECT * FROM memories WHERE importance = 'high' ORDER BY created_at DESC;
+
+getMemoriesWithEmbeddings:
+SELECT id, content, embedding FROM memories WHERE embedding IS NOT NULL AND embedding != '';
+
+-- ============================================
+-- Entity Queries
+-- ============================================
+
+getAllEntities:
+SELECT * FROM entities ORDER BY name ASC;
+
+getEntityById:
+SELECT * FROM entities WHERE id = ?;
+
+getEntityByNameAndType:
+SELECT * FROM entities WHERE name = ? AND entity_type = ?;
+
+getEntityByNameCaseInsensitive:
+SELECT * FROM entities WHERE LOWER(name) = LOWER(?) AND entity_type = ?;
+
+insertEntity:
+INSERT OR IGNORE INTO entities (name, entity_type, description, embedding, created_at)
+VALUES (?, ?, ?, ?, ?);
+
+updateEntityEmbedding:
+UPDATE entities SET embedding = ? WHERE id = ?;
+
+updateEntityDescription:
+UPDATE entities SET description = ? WHERE id = ?;
+
+getLastInsertedEntityId:
+SELECT last_insert_rowid();
+
+deleteEntity:
+DELETE FROM entities WHERE id = ?;
+
+getEntitiesByType:
+SELECT * FROM entities WHERE entity_type = ? ORDER BY name ASC;
+
+getEntitiesWithEmbeddings:
+SELECT id, name, entity_type, description, embedding FROM entities WHERE embedding IS NOT NULL AND embedding != '';
+
+-- ============================================
+-- Relation Queries
+-- ============================================
+
+getAllRelations:
+SELECT * FROM relations ORDER BY created_at DESC;
+
+getRelationById:
+SELECT * FROM relations WHERE id = ?;
+
+insertRelation:
+INSERT INTO relations (source_type, source_entity_id, target_entity_id, relation_type, description, memory_id, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+deleteRelation:
+DELETE FROM relations WHERE id = ?;
+
+getRelationsForEntity:
+SELECT r.*, 
+       se.name AS source_name, se.entity_type AS source_type_name,
+       te.name AS target_name, te.entity_type AS target_type_name
+FROM relations r
+JOIN entities se ON r.source_entity_id = se.id
+JOIN entities te ON r.target_entity_id = te.id
+WHERE r.source_entity_id = ? OR r.target_entity_id = ?;
+
+getEntityEntityRelations:
+SELECT r.*, 
+       se.name AS source_name, se.entity_type AS source_type_name,
+       te.name AS target_name, te.entity_type AS target_type_name
+FROM relations r
+JOIN entities se ON r.source_entity_id = se.id
+JOIN entities te ON r.target_entity_id = te.id
+WHERE r.source_type = 'entity';
+
+-- ============================================
+-- Memory-Entity Link Queries
+-- ============================================
+
+insertMemoryEntityLink:
+INSERT OR IGNORE INTO memory_entity_links (memory_id, entity_id, created_at)
+VALUES (?, ?, ?);
+
+getEntitiesForMemory:
+SELECT e.* FROM entities e
+JOIN memory_entity_links mel ON e.id = mel.entity_id
+WHERE mel.memory_id = ?;
+
+getMemoriesForEntity:
+SELECT m.* FROM memories m
+JOIN memory_entity_links mel ON m.id = mel.memory_id
+WHERE mel.entity_id = ?;
+
+-- ============================================
+-- Knowledge Graph Data (for visualization)
+-- ============================================
+
+getGraphData:
+SELECT 
+    r.id AS relation_id,
+    r.relation_type,
+    r.description AS relation_description,
+    se.id AS source_id,
+    se.name AS source_name,
+    se.entity_type AS source_type,
+    se.description AS source_description,
+    te.id AS target_id,
+    te.name AS target_name,
+    te.entity_type AS target_type,
+    te.description AS target_description
+FROM relations r
+JOIN entities se ON r.source_entity_id = se.id
+JOIN entities te ON r.target_entity_id = te.id;
+
+-- ============================================
+-- Stats
+-- ============================================
+
+getMemoryCount:
+SELECT COUNT(*) FROM memories;
+
+getEntityCount:
+SELECT COUNT(*) FROM entities;
+
+getRelationCount:
+SELECT COUNT(*) FROM relations;
+
+getMemoryCountByType:
+SELECT memory_type, COUNT(*) AS count FROM memories GROUP BY memory_type;
+
+getEntityCountByType:
+SELECT entity_type, COUNT(*) AS count FROM entities GROUP BY entity_type;

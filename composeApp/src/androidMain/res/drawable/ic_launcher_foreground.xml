@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Cactus icon -->
+    <path
+        android:fillColor="#4ECDC4"
+        android:pathData="M54,24
+            L54,84
+            M54,40 L40,50
+            M54,55 L68,45
+            M54,70 L44,62" 
+        android:strokeWidth="8"
+        android:strokeColor="#4ECDC4"
+        android:strokeLineCap="round"/>
+    <!-- Brain circuit overlay -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#E94560"
+        android:strokeWidth="2"
+        android:pathData="M40,30 Q54,20 68,30
+            M36,45 Q54,35 72,45
+            M36,60 Q54,70 72,60"/>
+</vector>
+
