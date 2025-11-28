@@ -29,6 +29,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cacto.app.ai.ModelDownloadState
+import com.cacto.app.ui.components.GlassCard
+import com.cacto.app.ui.components.MonoText
+import com.cacto.app.ui.components.NeonButton
 import com.cacto.app.ui.theme.CactoGreen
 import com.cacto.app.ui.theme.CactoPink
 
@@ -53,14 +56,7 @@ fun ModelDownloadScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.surface
-                    )
-                )
-            )
+            .background(Color.Black)
     ) {
         Column(
             modifier = Modifier
@@ -78,161 +74,156 @@ fun ModelDownloadScreen(
             
             Spacer(modifier = Modifier.height(24.dp))
             
-            Text(
-                text = "Cacto",
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontWeight = FontWeight.Bold
-                ),
+            MonoText(
+                text = "CACTO OS",
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Bold,
                 color = CactoGreen
             )
             
             Spacer(modifier = Modifier.height(8.dp))
             
-            Text(
-                text = "Personal AI Memory Assistant",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            MonoText(
+                text = "PERSONAL AI MEMORY ASSISTANT",
+                fontSize = 12.sp,
+                color = Color.White.copy(alpha = 0.5f)
             )
             
             Spacer(modifier = Modifier.height(48.dp))
             
             // Download status card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
-                ),
-                shape = RoundedCornerShape(16.dp)
+            GlassCard(
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
+                    modifier = Modifier.padding(8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     if (!downloadState.isDownloading && !downloadState.visionModelReady && downloadState.error == null) {
                         // Initial state - show download button
-                        Text(
-                            text = "Download AI Models",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        Text(
-                            text = "Cacto needs to download AI models to work offline.\nThis may take a few minutes.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
+                        MonoText(
+                            text = "DOWNLOAD AI MODELS",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
                         )
                         
                         Spacer(modifier = Modifier.height(16.dp))
                         
-                        // Model list
-                        ModelItem(
-                            name = "Vision Model",
-                            description = "lfm2-vl-450m - Analyzes screenshots",
-                            isReady = false
-                        )
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        ModelItem(
-                            name = "Text Model", 
-                            description = "qwen3-0.6 - Generates responses",
-                            isReady = false
+                        MonoText(
+                            text = "Cacto runs 100% on-device. Download models once to run offline forever.",
+                            fontSize = 12.sp,
+                            color = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier.fillMaxWidth()
                         )
                         
                         Spacer(modifier = Modifier.height(24.dp))
                         
-                        Button(
+                        // Model list
+                        ModelItem(
+                            name = "VISION MODEL",
+                            description = "lfm2-vl-450m (~1.5GB)",
+                            isReady = false
+                        )
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        ModelItem(
+                            name = "TEXT MODEL", 
+                            description = "qwen3-0.6 (~500MB)",
+                            isReady = false
+                        )
+                        
+                        Spacer(modifier = Modifier.height(32.dp))
+                        
+                        NeonButton(
+                            text = "START DOWNLOAD (~2GB)",
                             onClick = onStartDownload,
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = CactoGreen
-                            )
-                        ) {
-                            Text("Download Models (~500MB)")
-                        }
+                            modifier = Modifier.fillMaxWidth()
+                        )
                         
                     } else if (downloadState.isDownloading) {
                         // Downloading state
-                        Text(
-                            text = "Downloading Models...",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                        MonoText(
+                            text = "DOWNLOADING MODELS...",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = CactoGreen
                         )
                         
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(24.dp))
                         
-                        CircularProgressIndicator(
+                        LinearProgressIndicator(
                             color = CactoGreen,
-                            modifier = Modifier.size(48.dp)
+                            trackColor = CactoGreen.copy(alpha = 0.2f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
                         )
                         
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(24.dp))
                         
-                        Text(
-                            text = downloadState.progress,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        MonoText(
+                            text = downloadState.progress.uppercase(),
+                            fontSize = 12.sp,
+                            color = Color.White.copy(alpha = 0.7f)
                         )
                         
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(24.dp))
                         
                         ModelItem(
-                            name = "Vision Model",
+                            name = "VISION MODEL",
                             description = "lfm2-vl-450m",
-                            isReady = downloadState.visionModelReady
+                            isReady = downloadState.visionModelReady,
+                            isActive = downloadState.currentModel == com.cacto.app.ai.CactusService.VISION_MODEL
                         )
                         
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
                         
                         ModelItem(
-                            name = "Text Model",
+                            name = "TEXT MODEL",
                             description = "qwen3-0.6", 
-                            isReady = downloadState.textModelReady
+                            isReady = downloadState.textModelReady,
+                            isActive = downloadState.currentModel == com.cacto.app.ai.CactusService.TEXT_MODEL
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        MonoText(
+                            text = "PLEASE KEEP APP OPEN",
+                            fontSize = 10.sp,
+                            color = CactoPink.copy(alpha = 0.8f)
                         )
                         
                     } else if (downloadState.error != null) {
                         // Error state
-                        Text(
-                            text = "❌ Download Failed",
-                            style = MaterialTheme.typography.titleMedium,
+                        MonoText(
+                            text = "❌ DOWNLOAD FAILED",
+                            fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.error
                         )
                         
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        Text(
-                            text = downloadState.error,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-                        
                         Spacer(modifier = Modifier.height(16.dp))
                         
-                        Button(
+                        MonoText(
+                            text = downloadState.error,
+                            fontSize = 12.sp,
+                            color = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        
+                        Spacer(modifier = Modifier.height(24.dp))
+                        
+                        NeonButton(
+                            text = "RETRY DOWNLOAD",
                             onClick = onRetry,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = CactoPink
-                            )
-                        ) {
-                            Text("Retry Download")
-                        }
+                            color = CactoPink,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            Text(
-                text = "Models run 100% on-device.\nNo internet needed after download.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                textAlign = TextAlign.Center
-            )
         }
     }
 }
@@ -241,32 +232,32 @@ fun ModelDownloadScreen(
 fun ModelItem(
     name: String,
     description: String,
-    isReady: Boolean
+    isReady: Boolean,
+    isActive: Boolean = false
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = if (isReady) "✅" else "⏳",
-            fontSize = 20.sp
+            text = if (isReady) "✅" else if (isActive) "⏳" else "⭕",
+            fontSize = 16.sp
         )
         
         Spacer(modifier = Modifier.width(12.dp))
         
         Column {
-            Text(
+            MonoText(
                 text = name,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                color = if (isReady) CactoGreen else MaterialTheme.colorScheme.onSurface
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isReady) CactoGreen else if (isActive) CactoGreen.copy(alpha = 0.7f) else Color.White.copy(alpha = 0.5f)
             )
-            Text(
+            MonoText(
                 text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                fontSize = 10.sp,
+                color = Color.White.copy(alpha = 0.3f)
             )
         }
     }
 }
-

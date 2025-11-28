@@ -22,9 +22,11 @@ import com.cactus.CactusLM
 import com.cactus.CactusInitParams
 import com.cactus.CactusCompletionParams
 import com.cactus.ChatMessage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 
 data class ModelDownloadState(
     val isDownloading: Boolean = false,
@@ -57,15 +59,45 @@ class CactusService {
     }
     
     /**
+     * Check if models are already downloaded on disk and update state accordingly.
+     * This should be called on app startup to avoid showing download screen unnecessarily.
+     */
+    suspend fun checkModelsDownloaded(): Unit = withContext(Dispatchers.IO) {
+        try {
+            // Try to download vision model - if it already exists, this will be a no-op
+            if (visionLM == null) {
+                visionLM = CactusLM()
+            }
+            visionLM?.downloadModel(VISION_MODEL)
+            
+            // Try to download text model - if it already exists, this will be a no-op
+            if (textLM == null) {
+                textLM = CactusLM()
+            }
+            textLM?.downloadModel(TEXT_MODEL)
+            
+            // If we got here without exceptions, models are ready
+            _downloadState.value = ModelDownloadState(
+                visionModelReady = true,
+                textModelReady = true,
+                progress = "Models ready"
+            )
+        } catch (e: Exception) {
+            // Models not downloaded yet, state remains default (both false)
+            // This is fine - user will need to download them
+        }
+    }
+    
+    /**
      * Download all required models. Call this on app launch.
      */
-    suspend fun downloadModels(): Result<Unit> {
-        return try {
+    suspend fun downloadModels(): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
             // Download vision model
             _downloadState.value = ModelDownloadState(
                 isDownloading = true,
                 currentModel = VISION_MODEL,
-                progress = "Downloading vision model..."
+                progress = "Downloading vision model (1/2)..."
             )
             
             if (visionLM == null) {
@@ -76,7 +108,7 @@ class CactusService {
             _downloadState.value = _downloadState.value.copy(
                 visionModelReady = true,
                 currentModel = TEXT_MODEL,
-                progress = "Downloading text model..."
+                progress = "Downloading text model (2/2)..."
             )
             
             // Download text model
@@ -111,12 +143,13 @@ class CactusService {
     /**
      * Initialize the vision model for image analysis.
      */
-    suspend fun initializeVisionModel(): Result<Unit> {
-        return try {
-            if (visionModelLoaded) return Result.success(Unit)
+    suspend fun initializeVisionModel(): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            if (visionModelLoaded) return@withContext Result.success(Unit)
             
             if (visionLM == null) {
                 visionLM = CactusLM()
+                // Ensure model is downloaded before init
                 visionLM?.downloadModel(VISION_MODEL)
             }
             
@@ -137,12 +170,13 @@ class CactusService {
     /**
      * Initialize the text model for completions and embeddings.
      */
-    suspend fun initializeTextModel(): Result<Unit> {
-        return try {
-            if (textModelLoaded) return Result.success(Unit)
+    suspend fun initializeTextModel(): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            if (textModelLoaded) return@withContext Result.success(Unit)
             
             if (textLM == null) {
                 textLM = CactusLM()
+                // Ensure model is downloaded before init
                 textLM?.downloadModel(TEXT_MODEL)
             }
             
@@ -168,11 +202,13 @@ class CactusService {
         prompt: String,
         systemPrompt: String? = null,
         maxTokens: Int = 500
-    ): Result<String> {
-        return try {
+    ): Result<String> = withContext(Dispatchers.IO) {
+        try {
             // Ensure vision model is ready
             if (!visionModelLoaded) {
-                initializeVisionModel().getOrThrow()
+                // Use getOrThrow to propagate exception if init fails
+                val initResult = initializeVisionModel()
+                if (initResult.isFailure) return@withContext Result.failure(initResult.exceptionOrNull()!!)
             }
             
             val messages = buildList {
@@ -207,11 +243,12 @@ class CactusService {
         systemPrompt: String? = null,
         maxTokens: Int = 500,
         onToken: ((String) -> Unit)? = null
-    ): Result<String> {
-        return try {
+    ): Result<String> = withContext(Dispatchers.IO) {
+        try {
             // Ensure text model is ready
             if (!textModelLoaded) {
-                initializeTextModel().getOrThrow()
+                val initResult = initializeTextModel()
+                if (initResult.isFailure) return@withContext Result.failure(initResult.exceptionOrNull()!!)
             }
             
             val messages = buildList {
@@ -238,11 +275,12 @@ class CactusService {
     /**
      * Generate embedding using the text model.
      */
-    suspend fun generateEmbedding(text: String): Result<List<Double>> {
-        return try {
+    suspend fun generateEmbedding(text: String): Result<List<Double>> = withContext(Dispatchers.IO) {
+        try {
             // Ensure text model is ready
             if (!textModelLoaded) {
-                initializeTextModel().getOrThrow()
+                val initResult = initializeTextModel()
+                if (initResult.isFailure) return@withContext Result.failure(initResult.exceptionOrNull()!!)
             }
             
             val result = textLM?.generateEmbedding(text)

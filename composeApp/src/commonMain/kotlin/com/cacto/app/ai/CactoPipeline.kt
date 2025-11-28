@@ -105,13 +105,13 @@ class CactoPipeline(
             if (!cactusService.isTextModelLoaded()) {
                 cactusService.initializeTextModel().getOrThrow()
             }
-            historyRepository.completeStep(currentStepId, StepStatus.COMPLETED, "Vision & Text models ready")
+            historyRepository.updateStep(currentStepId, StepStatus.COMPLETED.name, "Vision & Text models ready")
             
             // Step 2: Classify action
             currentStepId = historyRepository.addStep(historyId, "Classify Action")
             updateState(PipelineStatus.ANALYZING, "Analyzing screenshot...", 0.1f)
             val analysisResult = memoryExtractor.classifyAction(imagePath).getOrThrow()
-            historyRepository.completeStep(currentStepId, StepStatus.COMPLETED, 
+            historyRepository.updateStep(currentStepId, StepStatus.COMPLETED.name, 
                 "Action: ${analysisResult.actionType}, Context: ${analysisResult.context.take(100)}")
             
             var memoriesSaved = 0
@@ -132,7 +132,7 @@ class CactoPipeline(
                     currentStepId = historyRepository.addStep(historyId, "Describe Screenshot")
                     screenshotDescription = memoryExtractor.describeScreenshot(imagePath)
                         .getOrElse { analysisResult.context }
-                    historyRepository.completeStep(currentStepId, StepStatus.COMPLETED, 
+                    historyRepository.updateStep(currentStepId, StepStatus.COMPLETED.name, 
                         screenshotDescription.take(200))
                     
                     generatedResponse = processAction(screenshotDescription, historyId, onResponseToken)
@@ -146,7 +146,7 @@ class CactoPipeline(
                     currentStepId = historyRepository.addStep(historyId, "Describe Screenshot")
                     screenshotDescription = memoryExtractor.describeScreenshot(imagePath)
                         .getOrElse { analysisResult.context }
-                    historyRepository.completeStep(currentStepId, StepStatus.COMPLETED,
+                    historyRepository.updateStep(currentStepId, StepStatus.COMPLETED.name,
                         screenshotDescription.take(200))
                     
                     generatedResponse = processAction(screenshotDescription, historyId, onResponseToken)
@@ -163,16 +163,16 @@ class CactoPipeline(
             )
             
             // Complete history
-            historyRepository.completeProcessing(
-                historyId = historyId,
-                status = ProcessingStatus.COMPLETED,
+            historyRepository.updateProcessing(
+                id = historyId,
+                status = ProcessingStatus.COMPLETED.name,
                 actionType = analysisResult.actionType.name,
-                screenshotDescription = screenshotDescription.take(500),
+                description = screenshotDescription.take(500),
                 memoriesSaved = memoriesSaved,
                 entitiesCreated = entitiesCreated,
                 relationsCreated = relationsCreated,
-                generatedResponse = generatedResponse,
-                errorMessage = null
+                response = generatedResponse,
+                error = null
             )
             
             entityResolutionService?.clearCache()
@@ -181,17 +181,17 @@ class CactoPipeline(
             
         } catch (e: Exception) {
             // Log error
-            historyRepository.completeStep(currentStepId, StepStatus.ERROR, errorMessage = e.message)
-            historyRepository.completeProcessing(
-                historyId = historyId,
-                status = ProcessingStatus.ERROR,
+            historyRepository.updateStep(currentStepId, StepStatus.ERROR.name, error = e.message)
+            historyRepository.updateProcessing(
+                id = historyId,
+                status = ProcessingStatus.ERROR.name,
                 actionType = null,
-                screenshotDescription = null,
+                description = null,
                 memoriesSaved = 0,
                 entitiesCreated = 0,
                 relationsCreated = 0,
-                generatedResponse = null,
-                errorMessage = e.message
+                response = null,
+                error = e.message
             )
             
             updateState(PipelineStatus.ERROR, "Error: ${e.message}", error = e.message)
@@ -207,7 +207,7 @@ class CactoPipeline(
         var stepId = historyRepository.addStep(historyId, "Extract Memories")
         updateState(PipelineStatus.EXTRACTING_MEMORIES, "Extracting memories...", 0.2f)
         val extractedMemories = memoryExtractor.extractMemories(imagePath).getOrElse { emptyList() }
-        historyRepository.completeStep(stepId, StepStatus.COMPLETED, 
+        historyRepository.updateStep(stepId, StepStatus.COMPLETED.name, 
             "Found ${extractedMemories.size} memories: ${extractedMemories.map { it.content.take(50) }}")
         
         if (extractedMemories.isEmpty()) {
@@ -248,7 +248,7 @@ class CactoPipeline(
             savedMemories.add(extractedMemory)
             memoriesSaved++
         }
-        historyRepository.completeStep(stepId, StepStatus.COMPLETED, 
+        historyRepository.updateStep(stepId, StepStatus.COMPLETED.name, 
             "Saved $memoriesSaved memories with embeddings")
         
         // Step: Extract entities
@@ -257,10 +257,10 @@ class CactoPipeline(
         val batchExtraction = memoryExtractor.extractEntitiesFromBatch(savedMemories).getOrNull()
         
         if (batchExtraction == null || batchExtraction.entities.isEmpty()) {
-            historyRepository.completeStep(stepId, StepStatus.COMPLETED, "No entities found")
+            historyRepository.updateStep(stepId, StepStatus.COMPLETED.name, "No entities found")
             return Triple(memoriesSaved, 0, 0)
         }
-        historyRepository.completeStep(stepId, StepStatus.COMPLETED, 
+        historyRepository.updateStep(stepId, StepStatus.COMPLETED.name, 
             "Found ${batchExtraction.entities.size} entities: ${batchExtraction.entities.map { it.name }}")
         
         // Step: Resolve entities
@@ -292,7 +292,7 @@ class CactoPipeline(
             resolvedEntityMap[extractedEntity.name.lowercase()] = resolvedEntity.id
             entitiesCreated++
         }
-        historyRepository.completeStep(stepId, StepStatus.COMPLETED, 
+        historyRepository.updateStep(stepId, StepStatus.COMPLETED.name, 
             "Resolved $entitiesCreated entities: ${resolvedEntityMap.keys.toList()}")
         
         // Step: Create relations
@@ -334,7 +334,7 @@ class CactoPipeline(
                 } catch (e: Exception) { }
             }
         }
-        historyRepository.completeStep(stepId, StepStatus.COMPLETED, 
+        historyRepository.updateStep(stepId, StepStatus.COMPLETED.name, 
             "Created $relationsCreated relations")
         
         return Triple(memoriesSaved, entitiesCreated, relationsCreated)
@@ -359,7 +359,7 @@ class CactoPipeline(
         } else {
             memoryRepository.getRecentMemories(5)
         }
-        historyRepository.completeStep(stepId, StepStatus.COMPLETED, 
+        historyRepository.updateStep(stepId, StepStatus.COMPLETED.name, 
             "Found ${relevantMemories.size} relevant memories: ${relevantMemories.map { it.content.take(30) }}")
         
         // Step: Generate response
@@ -372,7 +372,7 @@ class CactoPipeline(
             onToken = onResponseToken
         ).getOrThrow()
         
-        historyRepository.completeStep(stepId, StepStatus.COMPLETED, 
+        historyRepository.updateStep(stepId, StepStatus.COMPLETED.name, 
             "Generated: ${response.response.take(100)}...")
         
         return response.response

@@ -54,6 +54,7 @@ fun DebugScreen(
     onBack: () -> Unit
 ) {
     Scaffold(
+        containerColor = Color(0xFF050505), // Force dark background
         topBar = {
             TopAppBar(
                 title = { Text("🐛 Debug History") },
@@ -63,7 +64,7 @@ fun DebugScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
+                    containerColor = Color(0xFF050505)
                 )
             )
         }
@@ -72,15 +73,7 @@ fun DebugScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.background,
-                            MaterialTheme.colorScheme.surface
-                        )
-                    )
-                )
-        ) {
+            ) {
             if (history.isEmpty()) {
                 Column(
                     modifier = Modifier

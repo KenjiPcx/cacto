@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Cacto" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:statusBarColor">#FF1A1A2E</item>
-        <item name="android:navigationBarColor">#FF1A1A2E</item>
+    <style name="Theme.Cacto" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#FF050505</item>
+        <item name="android:navigationBarColor">#FF050505</item>
+        <item name="android:windowBackground">#FF050505</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
     </style>
 </resources>
 

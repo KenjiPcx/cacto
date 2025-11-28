@@ -18,8 +18,11 @@ import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -53,13 +56,90 @@ class MainActivity : ComponentActivity() {
     ) { permissions ->
         val allGranted = permissions.all { it.value }
         if (allGranted) {
-            startCactoService()
+            // Check overlay permission
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                requestOverlayPermission()
+            } else {
+                startCactoService()
+            }
         } else {
             Toast.makeText(
                 this,
                 "Permissions needed to detect screenshots",
                 Toast.LENGTH_LONG
             ).show()
+        }
+    }
+    
+    // Overlay permission launcher
+    private val overlayPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        Log.d("MainActivity", "Overlay permission result received")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val hasOverlay = Settings.canDrawOverlays(this)
+            Log.d("MainActivity", "Overlay permission after settings: $hasOverlay")
+            if (hasOverlay) {
+                Toast.makeText(
+                    this,
+                    "Overlay permission granted! Starting Cacto...",
+                    Toast.LENGTH_SHORT
+                ).show()
+                startCactoService()
+            } else {
+                Toast.makeText(
+                    this,
+                    "Please enable 'Display over other apps' for Cacto to show floating widget",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+    
+    private fun requestOverlayPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Log.d("MainActivity", "Requesting overlay permission")
+            Toast.makeText(
+                this,
+                "Opening settings to enable overlay permission...",
+                Toast.LENGTH_LONG
+            ).show()
+            
+            try {
+                // Try the overlay permission intent first
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")
+                )
+                
+                // Check if the intent can be resolved
+                if (intent.resolveActivity(packageManager) != null) {
+                    overlayPermissionLauncher.launch(intent)
+                } else {
+                    // Fallback to app settings
+                    Log.w("MainActivity", "Overlay permission intent not available, using app settings")
+                    val fallbackIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    overlayPermissionLauncher.launch(fallbackIntent)
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error launching overlay permission settings", e)
+                // Fallback to app settings
+                try {
+                    val fallbackIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    overlayPermissionLauncher.launch(fallbackIntent)
+                } catch (e2: Exception) {
+                    Log.e("MainActivity", "Error launching app settings", e2)
+                    Toast.makeText(
+                        this,
+                        "Please enable 'Display over other apps' manually:\nSettings > Apps > Cacto > Display over other apps",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
         }
     }
     
@@ -116,7 +196,22 @@ class MainActivity : ComponentActivity() {
         if (permissions.isNotEmpty()) {
             permissionLauncher.launch(permissions.toTypedArray())
         } else {
-            startCactoService()
+            // Media permissions already granted, check overlay permission
+            Log.d("MainActivity", "Media permissions already granted, checking overlay permission")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val hasOverlay = Settings.canDrawOverlays(this)
+                Log.d("MainActivity", "Overlay permission granted: $hasOverlay")
+                if (!hasOverlay) {
+                    Log.d("MainActivity", "Requesting overlay permission")
+                    requestOverlayPermission()
+                } else {
+                    Log.d("MainActivity", "All permissions granted, starting service")
+                    startCactoService()
+                }
+            } else {
+                // Android < M doesn't need overlay permission
+                startCactoService()
+            }
         }
     }
     

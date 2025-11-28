@@ -24,6 +24,7 @@ import com.cacto.app.ui.screens.DebugScreen
 import com.cacto.app.ui.screens.HomeScreen
 import com.cacto.app.ui.screens.KnowledgeGraphScreen
 import com.cacto.app.ui.screens.MemoriesScreen
+import com.cacto.app.ui.components.OrbBackground
 import com.cacto.app.ui.screens.ModelDownloadScreen
 import com.cacto.app.ui.theme.CactoTheme
 import kotlinx.coroutines.launch
@@ -57,7 +58,12 @@ fun App(
     var processingHistory by remember { mutableStateOf<List<ProcessingHistory>>(emptyList()) }
     var searchQuery by remember { mutableStateOf("") }
     
-    // Check if models are already downloaded
+    // Check if models are already downloaded on startup
+    LaunchedEffect(Unit) {
+        cactusService.checkModelsDownloaded()
+    }
+    
+    // Update modelsReady when download state changes
     LaunchedEffect(downloadState) {
         if (downloadState.visionModelReady && downloadState.textModelReady) {
             modelsReady = true
@@ -91,22 +97,23 @@ fun App(
     }
     
     CactoTheme {
-        if (!modelsReady) {
-            ModelDownloadScreen(
-                downloadState = downloadState,
-                onStartDownload = {
-                    scope.launch {
-                        cactusService.downloadModels()
+        OrbBackground {
+            if (!modelsReady) {
+                ModelDownloadScreen(
+                    downloadState = downloadState,
+                    onStartDownload = {
+                        scope.launch {
+                            cactusService.downloadModels()
+                        }
+                    },
+                    onRetry = {
+                        scope.launch {
+                            cactusService.downloadModels()
+                        }
                     }
-                },
-                onRetry = {
-                    scope.launch {
-                        cactusService.downloadModels()
-                    }
-                }
-            )
-        } else {
-            when (currentScreen) {
+                )
+            } else {
+                when (currentScreen) {
                 Screen.HOME -> {
                     HomeScreen(
                         pipelineState = pipelineState,
@@ -174,6 +181,7 @@ fun App(
                     )
                 }
             }
+        }
         }
     }
 }

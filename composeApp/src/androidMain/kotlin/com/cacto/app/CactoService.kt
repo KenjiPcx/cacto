@@ -107,6 +107,12 @@ class CactoService : Service() {
     }
     
     private suspend fun processScreenshot(path: String) {
+        // Show floating overlay
+        val overlayIntent = Intent(this, FloatingOverlayService::class.java).apply {
+            putExtra("screenshot_path", path)
+        }
+        startService(overlayIntent)
+        
         // Update notification to show processing
         updateNotification("Processing screenshot...")
         

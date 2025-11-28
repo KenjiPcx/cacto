@@ -98,7 +98,7 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun CactoTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = true, // Force Dark Mode for Nothing Aesthetic
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme

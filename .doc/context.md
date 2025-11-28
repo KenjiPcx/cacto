@@ -140,6 +140,11 @@ Meanwhile, facts about the conversation partner are saved to the knowledge graph
 
 ## Recent Changes
 
+### Stability & UI Improvements
+- **Crash Fix**: Moved `downloadModels()` to `Dispatchers.IO` to prevent main thread blocking (ANR).
+- **UI Improvement**: Updated `ModelDownloadScreen` to use `LinearProgressIndicator` and clearer status text.
+- **Previous Work**: Complete UI redesign with Glassmorphism / Nothing Phone aesthetic.
+
 ### UI Redesign (Completed)
 - **Goal**: Minimalist glassmorphism design (Nothing Phone style) with Palantir enterprise aesthetics and animated gradient orb background.
 - **Completed Tasks**:

@@ -5,8 +5,7 @@ package com.cacto.app.ui.screens
  * ===========
  *
  * PURPOSE:
- * Main entry point of the app. Shows listening status, processing progress,
- * and navigation to memories/graph screens.
+ * Main entry point of the app. Shows processing progress and navigation.
  *
  * WHERE USED:
  * - Rendered by: App composable (default screen)
@@ -14,25 +13,36 @@ package com.cacto.app.ui.screens
  *
  * REDESIGN:
  * - Minimalist glassmorphism
- * - Nothing Phone inspired aesthetics
+ * - Nothing Phone inspired aesthetics (Dot matrix, technical grid)
  */
 
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.center
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cacto.app.ai.PipelineState
@@ -59,233 +69,326 @@ fun HomeScreen(
                        pipelineState.status != PipelineStatus.COMPLETE &&
                        pipelineState.status != PipelineStatus.ERROR
     
-    // Pulsing animation for listening state
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.08f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = EaseInOutCubic),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "scale"
-    )
-    
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.Start
     ) {
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(48.dp))
         
-        // Logo/Title
-        MonoText(
-            text = "CACTO OS",
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-        )
+        // Header - Dot Matrix Style
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .background(CactoGreen, CircleShape)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            MonoText(
+                text = "CACTO OS",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            MonoText(
+                text = "v1.0",
+                fontSize = 12.sp,
+                color = Color.White.copy(alpha = 0.5f)
+            )
+        }
         
         TechDivider(
             modifier = Modifier
-                .width(60.dp)
-                .padding(vertical = 16.dp),
-            color = CactoGreen.copy(alpha = 0.5f)
+                .padding(top = 16.dp, bottom = 32.dp),
+            color = Color.White.copy(alpha = 0.1f)
         )
         
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        // Main action button - Start/Stop Listening
+        // Main Content Area
         Box(
             modifier = Modifier
-                .size(200.dp)
-                .scale(if (isListening && !isProcessing) scale else 1f)
-                .clip(CircleShape)
-                .background(Color.Transparent)
-                .border(
-                    width = 2.dp,
-                    color = if (isListening) CactoGreen else Color.White.copy(alpha = 0.2f),
-                    shape = CircleShape
-                )
-                .clickable { onToggleListening(!isListening) },
+                .weight(1f)
+                .fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
-            // Inner circle for visual effect
-            Box(
-                modifier = Modifier
-                    .size(180.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (isListening) CactoGreen.copy(alpha = 0.1f) 
-                        else Color.White.copy(alpha = 0.05f)
-                    )
+            // Central Status Display
+            StatusOrb(
+                isProcessing = isProcessing,
+                status = pipelineState.status
             )
-            
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (isProcessing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(48.dp),
-                        color = CactoGreen,
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    MonoText(
-                        text = "PROCESSING",
-                        color = CactoGreen,
-                        fontSize = 12.sp
-                    )
-                } else if (isListening) {
-                    Text(text = "👂", fontSize = 48.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    MonoText(
-                        text = "LISTENING",
-                        color = CactoGreen,
-                        fontWeight = FontWeight.Bold
-                    )
-                } else {
-                    Text(text = "👁️", fontSize = 48.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    MonoText(
-                        text = "START",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
         }
         
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        // Processing status
+        // Processing Status Overlay
         if (pipelineState.status != PipelineStatus.IDLE) {
             GlassCard(
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp),
+                backgroundColor = Color(0xFF0A0A0A).copy(alpha = 0.8f)
             ) {
-                Column {
-                    MonoText(
-                        text = pipelineState.currentStep.uppercase(),
-                        fontSize = 12.sp,
-                        color = Color.White.copy(alpha = 0.7f)
-                    )
-                    
-                    if (isProcessing) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        LinearProgressIndicator(
-                            progress = { pipelineState.progress },
-                            modifier = Modifier.fillMaxWidth(),
-                            color = CactoGreen,
-                            trackColor = CactoGreen.copy(alpha = 0.2f)
-                        )
-                    }
-                    
-                    pipelineState.result?.let { result ->
-                        Spacer(modifier = Modifier.height(12.dp))
-                        if (result.memoriesSaved > 0) {
-                            MonoText(
-                                text = ">> ${result.memoriesSaved} MEMORIES SAVED",
-                                fontSize = 12.sp,
-                                color = CactoGreen
-                            )
-                        }
-                        if (result.generatedResponse != null) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            MonoText(
-                                text = ">> RESPONSE COPIED TO CLIPBOARD",
-                                fontSize = 12.sp,
-                                color = CactoPink
-                            )
-                        }
-                    }
-                    
-                    pipelineState.error?.let { error ->
-                        Spacer(modifier = Modifier.height(8.dp))
-                        MonoText(
-                            text = "ERROR: $error",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                   Column(modifier = Modifier.weight(1f)) {
+                       MonoText(
+                           text = pipelineState.currentStep.uppercase(),
+                           fontSize = 10.sp,
+                           color = CactoGreen
+                       )
+                       Spacer(modifier = Modifier.height(4.dp))
+                       if (isProcessing) {
+                           LinearProgressIndicator(
+                               progress = { pipelineState.progress },
+                               modifier = Modifier.fillMaxWidth(),
+                               color = CactoGreen,
+                               trackColor = CactoGreen.copy(alpha = 0.2f),
+                               strokeCap = androidx.compose.ui.graphics.StrokeCap.Square
+                           )
+                       } else {
+                           MonoText(
+                               text = when(pipelineState.status) {
+                                   PipelineStatus.COMPLETE -> "PROCESSING COMPLETE"
+                                   PipelineStatus.ERROR -> "ERROR OCCURRED"
+                                   else -> ""
+                               },
+                               fontSize = 12.sp,
+                               color = Color.White
+                           )
+                       }
+                   }
                 }
             }
         } else {
-             MonoText(
-                text = if (isListening) {
-                    "TAKE A SCREENSHOT TO ANALYZE"
-                } else {
-                    "SYSTEM STANDBY"
-                },
-                color = Color.White.copy(alpha = 0.5f),
-                fontSize = 12.sp,
-                modifier = Modifier.fillMaxWidth(),
-            )
-             // Center the text
-             // Modifier.fillMaxWidth() alone won't center the text content, need TextAlign.Center
-             // But MonoText wraps Text which has textAlign param. I should update MonoText or use Box.
-             // Let's use Box to center or add textAlign to MonoText.
-             // I'll leave it left aligned for "terminal" feel, or just adjust the MonoText component later if needed.
+            // Instructions when idle
+            GlassCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp),
+                backgroundColor = Color(0xFF0A0A0A).copy(alpha = 0.5f)
+            ) {
+                MonoText(
+                    text = "SHARE A SCREENSHOT TO ANALYZE",
+                    fontSize = 12.sp,
+                    color = Color.White.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
         
-        Spacer(modifier = Modifier.weight(1f))
-        
-        // Stats cards
+        // Bottom Stats Grid
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            StatGlassCard(
+            StatWidget(
                 modifier = Modifier.weight(1f),
                 value = memoryCount.toString(),
                 label = "MEMORIES",
+                icon = null,
+                color = CactoGreen,
                 onClick = onNavigateToMemories
             )
-            StatGlassCard(
+            StatWidget(
                 modifier = Modifier.weight(1f),
                 value = entityCount.toString(),
                 label = "ENTITIES",
+                icon = Icons.Filled.Share,
+                color = CactoPink,
                 onClick = onNavigateToGraph
             )
-            StatGlassCard(
+            StatWidget(
                 modifier = Modifier.weight(1f),
                 value = historyCount.toString(),
                 label = "DEBUG",
+                icon = Icons.Filled.Settings,
+                color = Color.White,
                 onClick = onNavigateToDebug
             )
         }
         
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(32.dp))
     }
 }
 
 @Composable
-fun StatGlassCard(
+fun StatusOrb(
+    isProcessing: Boolean,
+    status: PipelineStatus
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "orb_pulse")
+    
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = if (isProcessing) 1.15f else 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse"
+    )
+
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(8000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "rotation"
+    )
+
+    Box(
+        modifier = Modifier.size(240.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        // Outer dashed ring
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val strokeWidth = 2.dp.toPx()
+            val radius = size.minDimension / 2 - strokeWidth
+            val center = Offset(size.width / 2, size.height / 2)
+            
+            if (isProcessing) {
+                rotate(rotation, center) {
+                    drawCircle(
+                        color = CactoGreen.copy(alpha = 0.3f),
+                        radius = radius,
+                        center = center,
+                        style = Stroke(
+                            width = strokeWidth,
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 20f), 0f)
+                        )
+                    )
+                }
+            } else {
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.1f),
+                    radius = radius,
+                    center = center,
+                    style = Stroke(width = strokeWidth)
+                )
+            }
+        }
+        
+        // Inner pulsing orb
+        Box(
+            modifier = Modifier
+                .size(140.dp)
+                .scale(pulseScale)
+                .clip(CircleShape)
+                .background(
+                    if (isProcessing) CactoGreen.copy(alpha = 0.1f)
+                    else Color.White.copy(alpha = 0.05f)
+                )
+                .border(
+                    width = 1.dp,
+                    color = if (isProcessing) CactoGreen else Color.White.copy(alpha = 0.2f),
+                    shape = CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+             when {
+                 isProcessing -> Icon(
+                     imageVector = Icons.Filled.Refresh,
+                     contentDescription = "Processing",
+                     tint = CactoGreen,
+                     modifier = Modifier.size(48.dp)
+                 )
+                 status == PipelineStatus.COMPLETE -> Icon(
+                     imageVector = Icons.Filled.CheckCircle,
+                     contentDescription = "Complete",
+                     tint = CactoGreen,
+                     modifier = Modifier.size(48.dp)
+                 )
+                 status == PipelineStatus.ERROR -> Icon(
+                     imageVector = Icons.Filled.Warning,
+                     contentDescription = "Error",
+                     tint = Color.White.copy(alpha = 0.5f),
+                     modifier = Modifier.size(48.dp)
+                 )
+                 else -> {
+                     // Use text instead of icon for standby
+                     MonoText(
+                         text = "●",
+                         fontSize = 48.sp,
+                         color = Color.White.copy(alpha = 0.3f)
+                     )
+                 }
+             }
+        }
+        
+        // Status Text
+        Box(
+            modifier = Modifier.offset(y = 100.dp)
+        ) {
+            MonoText(
+                text = when {
+                    isProcessing -> "PROCESSING"
+                    status == PipelineStatus.COMPLETE -> "READY"
+                    status == PipelineStatus.ERROR -> "ERROR"
+                    else -> "STANDBY"
+                },
+                color = if (isProcessing) CactoGreen else Color.White.copy(alpha = 0.3f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+fun StatWidget(
     modifier: Modifier = Modifier,
     value: String,
     label: String,
+    icon: ImageVector?,
+    color: Color,
     onClick: () -> Unit
 ) {
     GlassCard(
-        modifier = modifier,
-        onClick = onClick
+        modifier = modifier.aspectRatio(1f),
+        onClick = onClick,
+        backgroundColor = Color(0xFF111111).copy(alpha = 0.5f),
+        borderColor = Color.White.copy(alpha = 0.05f)
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.Start
         ) {
-            MonoText(
-                text = value,
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-                color = CactoGreen
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            MonoText(
-                text = label,
-                fontSize = 10.sp,
-                color = Color.White.copy(alpha = 0.5f)
-            )
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = color.copy(alpha = 0.8f),
+                    modifier = Modifier.size(20.dp)
+                )
+            } else {
+                // Use a simple dot indicator for memories
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .background(color.copy(alpha = 0.8f), CircleShape)
+                )
+            }
+            
+            Column {
+                MonoText(
+                    text = value,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                MonoText(
+                    text = label,
+                    fontSize = 10.sp,
+                    color = Color.White.copy(alpha = 0.4f)
+                )
+            }
         }
     }
 }
